@@ -2275,7 +2275,7 @@ XLOGfileslop(XLogRecPtr lastredoptr)
  *
  * new_segno indicates a log file that has just been filled up (or read
  * during recovery). We measure the distance from RedoRecPtr to new_segno
- * and see if that exceeds CheckPointSegments.
+ * and see if that reaches CheckPointSegments.
  *
  * Note: it is caller's responsibility that RedoRecPtr is up-to-date.
  */
