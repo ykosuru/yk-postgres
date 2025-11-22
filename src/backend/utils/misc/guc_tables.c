@@ -525,6 +525,9 @@ bool		log_statement_stats = false;	/* this is sort of all three above
 bool		log_btree_build_stats = false;
 char	   *event_source;
 
+bool		query_cache_enabled = false;
+int			query_cache_size_mb = 0;
+
 bool		row_security;
 bool		check_function_bodies = true;
 
