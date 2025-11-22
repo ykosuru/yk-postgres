@@ -2284,6 +2284,23 @@
   check_hook => 'check_primary_slot_name',
 },
 
+{ name => 'query_cache', type => 'bool', context => 'PGC_SUSET', group => 'QUERY_TUNING_OTHER',
+  short_desc => 'Enables caching of SELECT query results in shared memory.',
+  long_desc => 'When enabled, caches SELECT query results in shared memory using query text and parameter values as the cache key. Cached results are automatically invalidated when underlying tables are modified. Requires query_cache_size to be set.',
+  variable => 'query_cache_enabled',
+  boot_val => 'false',
+},
+
+{ name => 'query_cache_size', type => 'int', context => 'PGC_POSTMASTER', group => 'QUERY_TUNING_OTHER',
+  short_desc => 'Sets the size of the query result cache in megabytes.',
+  long_desc => 'Allocates shared memory for caching SELECT query results. When the cache is full, least recently used entries are evicted. Set to 0 to disable query caching.',
+  flags => 'GUC_UNIT_MB',
+  variable => 'query_cache_size_mb',
+  boot_val => '0',
+  min => '0',
+  max => '1048576',
+},
+
 { name => 'quote_all_identifiers', type => 'bool', context => 'PGC_USERSET', group => 'COMPAT_OPTIONS_PREVIOUS',
   short_desc => 'When generating SQL fragments, quote all identifiers.',
   variable => 'quote_all_identifiers',
