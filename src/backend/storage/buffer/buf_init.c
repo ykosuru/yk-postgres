@@ -126,6 +126,9 @@ BufferManagerShmemInit(void)
 
 			buf->buf_id = i;
 
+			/* Initialize last access time to 0 (will be set on first access) */
+			buf->last_access_time = 0;
+
 			pgaio_wref_clear(&buf->io_wref);
 
 			LWLockInitialize(BufferDescriptorGetContentLock(buf),

@@ -3187,6 +3187,9 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy,
 			{
 				result = (buf_state & BM_VALID) != 0;
 
+				/* Update last access timestamp */
+				buf->last_access_time = GetCurrentTimestamp();
+
 				TrackNewBufferPin(b);
 				break;
 			}
@@ -3257,6 +3260,9 @@ PinBuffer_Locked(BufferDesc *buf)
 	 * release the lock in one operation.
 	 */
 	old_buf_state = pg_atomic_read_u32(&buf->state);
+
+	/* Update last access timestamp while holding the spinlock */
+	buf->last_access_time = GetCurrentTimestamp();
 
 	UnlockBufHdrExt(buf, old_buf_state,
 					0, 0, 1);
