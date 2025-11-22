@@ -2488,10 +2488,11 @@ again:
 #endif
 
 	/*
-	 * Log a warning if buffer eviction took longer than 100ms. This can help
-	 * identify performance issues related to buffer pool contention or slow
-	 * I/O operations.
+	 * Log a warning if buffer eviction took longer than 100ms and logging is
+	 * enabled. This can help identify performance issues related to buffer
+	 * pool contention or slow I/O operations.
 	 */
+	if (log_buffer_evictions)
 	{
 		instr_time	end_time;
 		double		total_ms;

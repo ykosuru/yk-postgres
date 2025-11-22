@@ -1545,6 +1545,13 @@
   ifdef => 'BTREE_BUILD_STATS',
 },
 
+{ name => 'log_buffer_evictions', type => 'bool', context => 'PGC_SUSET', group => 'LOGGING_WHAT',
+  short_desc => 'Logs slow buffer evictions that take longer than 100ms.',
+  long_desc => 'When enabled, logs WARNING messages for buffer evictions that exceed 100ms, including timing details, retry counts, and buffer information to help diagnose performance issues.',
+  variable => 'log_buffer_evictions',
+  boot_val => 'false',
+},
+
 { name => 'log_checkpoints', type => 'bool', context => 'PGC_SIGHUP', group => 'LOGGING_WHAT',
   short_desc => 'Logs each checkpoint.',
   variable => 'log_checkpoints',
