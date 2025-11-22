@@ -523,6 +523,7 @@ bool		log_executor_stats = false;
 bool		log_statement_stats = false;	/* this is sort of all three above
 											 * together */
 bool		log_btree_build_stats = false;
+bool		log_buffer_evictions = false;
 char	   *event_source;
 
 bool		row_security;

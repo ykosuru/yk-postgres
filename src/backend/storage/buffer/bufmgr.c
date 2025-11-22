@@ -2323,6 +2323,14 @@ GetVictimBuffer(BufferAccessStrategy strategy, IOContext io_context)
 	Buffer		buf;
 	uint32		buf_state;
 	bool		from_ring;
+	instr_time	start_time;
+	instr_time	flush_start_time;
+	instr_time	flush_end_time;
+	int			retries = 0;
+	bool		did_flush = false;
+	bool		was_dirty = false;
+	BufferTag	victim_tag;
+	bool		have_victim_tag = false;
 
 	/*
 	 * Ensure, before we pin a victim buffer, that there's a free refcount
@@ -2330,6 +2338,9 @@ GetVictimBuffer(BufferAccessStrategy strategy, IOContext io_context)
 	 */
 	ReservePrivateRefCountEntry();
 	ResourceOwnerEnlarge(CurrentResourceOwner);
+
+	/* Record start time for slow eviction detection */
+	INSTR_TIME_SET_CURRENT(start_time);
 
 	/* we return here if a prospective victim buffer gets used concurrently */
 again:
@@ -2382,6 +2393,7 @@ again:
 			 * to get another one.
 			 */
 			UnpinBuffer(buf_hdr);
+			retries++;
 			goto again;
 		}
 
@@ -2406,12 +2418,17 @@ again:
 			{
 				LWLockRelease(content_lock);
 				UnpinBuffer(buf_hdr);
+				retries++;
 				goto again;
 			}
 		}
 
 		/* OK, do the I/O */
+		was_dirty = true;
+		INSTR_TIME_SET_CURRENT(flush_start_time);
 		FlushBuffer(buf_hdr, NULL, IOOBJECT_RELATION, io_context);
+		INSTR_TIME_SET_CURRENT(flush_end_time);
+		did_flush = true;
 		LWLockRelease(content_lock);
 
 		ScheduleBufferTagForWriteback(&BackendWritebackContext, io_context,
@@ -2446,10 +2463,18 @@ again:
 	 * can fail because another backend could have pinned or dirtied the
 	 * buffer.
 	 */
-	if ((buf_state & BM_TAG_VALID) && !InvalidateVictimBuffer(buf_hdr))
+	if (buf_state & BM_TAG_VALID)
 	{
-		UnpinBuffer(buf_hdr);
-		goto again;
+		/* Copy the buffer tag before attempting invalidation */
+		victim_tag = buf_hdr->tag;
+		have_victim_tag = true;
+
+		if (!InvalidateVictimBuffer(buf_hdr))
+		{
+			UnpinBuffer(buf_hdr);
+			retries++;
+			goto again;
+		}
 	}
 
 	/* a final set of sanity checks */
@@ -2461,6 +2486,47 @@ again:
 
 	CheckBufferIsPinnedOnce(buf);
 #endif
+
+	/*
+	 * Log a warning if buffer eviction took longer than 100ms and logging is
+	 * enabled. This can help identify performance issues related to buffer
+	 * pool contention or slow I/O operations.
+	 */
+	if (log_buffer_evictions)
+	{
+		instr_time	end_time;
+		double		total_ms;
+
+		INSTR_TIME_SET_CURRENT(end_time);
+		total_ms = INSTR_TIME_GET_MILLISEC(end_time) - INSTR_TIME_GET_MILLISEC(start_time);
+
+		if (total_ms > 100.0)
+		{
+			double		flush_ms = 0.0;
+
+			if (did_flush)
+				flush_ms = INSTR_TIME_GET_MILLISEC(flush_end_time) - INSTR_TIME_GET_MILLISEC(flush_start_time);
+
+			if (have_victim_tag)
+			{
+				ereport(WARNING,
+						(errmsg("slow buffer eviction: %.3f ms (retries=%d, dirty=%s, flush_ms=%.3f)",
+								total_ms, retries, was_dirty ? "true" : "false", flush_ms),
+						 errdetail("RelFileLocator(spc=%u, db=%u, rel=%u), fork=%d, block=%u",
+								   victim_tag.rlocator.spcNode,
+								   victim_tag.rlocator.dbNode,
+								   victim_tag.rlocator.relNumber,
+								   (int) victim_tag.forkNum,
+								   victim_tag.blockNum)));
+			}
+			else
+			{
+				ereport(WARNING,
+						(errmsg("slow buffer eviction: %.3f ms (retries=%d, dirty=%s, flush_ms=%.3f)",
+								total_ms, retries, was_dirty ? "true" : "false", flush_ms)));
+			}
+		}
+	}
 
 	return buf;
 }
@@ -3121,6 +3187,9 @@ PinBuffer(BufferDesc *buf, BufferAccessStrategy strategy,
 			{
 				result = (buf_state & BM_VALID) != 0;
 
+				/* Update last access timestamp */
+				buf->last_access_time = GetCurrentTimestamp();
+
 				TrackNewBufferPin(b);
 				break;
 			}
@@ -3191,6 +3260,9 @@ PinBuffer_Locked(BufferDesc *buf)
 	 * release the lock in one operation.
 	 */
 	old_buf_state = pg_atomic_read_u32(&buf->state);
+
+	/* Update last access timestamp while holding the spinlock */
+	buf->last_access_time = GetCurrentTimestamp();
 
 	UnlockBufHdrExt(buf, old_buf_state,
 					0, 0, 1);

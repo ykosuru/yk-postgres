@@ -15,6 +15,7 @@
 #ifndef BUFMGR_INTERNALS_H
 #define BUFMGR_INTERNALS_H
 
+#include "datatype/timestamp.h"
 #include "pgstat.h"
 #include "port/atomics.h"
 #include "storage/aio_types.h"
@@ -287,6 +288,14 @@ typedef struct BufferDesc
 	 * held to modify this field.
 	 */
 	int			wait_backend_pgprocno;
+
+	/*
+	 * Timestamp of last access to this buffer. Updated when the buffer is
+	 * pinned. This field can be read without locking for approximate values,
+	 * but should be updated while holding the buffer header spinlock to avoid
+	 * races.
+	 */
+	TimestampTz	last_access_time;
 
 	PgAioWaitRef io_wref;		/* set iff AIO is in progress */
 	LWLock		content_lock;	/* to lock access to buffer contents */
